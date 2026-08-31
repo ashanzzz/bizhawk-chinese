@@ -1,0 +1,66 @@
+name: Auto Sync & AI Translate Upstream BizHawk
+
+on:
+  schedule:
+    # 每天 UTC 02:00 (北京时间 10:00) 自动检查并同步官方更新
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      force_translate:
+        description: '是否强制全量扫描并重新翻译'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  sync_and_translate:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Chinese Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add Official Upstream Remote & Sync
+        run: |
+          git remote add upstream https://github.com/TASEmulators/BizHawk.git || true
+          git fetch upstream master
+          git merge upstream/master -m "chore(sync): sync upstream BizHawk master updates" --allow-unrelated-histories || true
+
+      - name: Run Localization & AI Translation Pipeline
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+        run: |
+          python tools/sync_and_patch.py
+
+      - name: Verify Build
+        run: |
+          dotnet build src/BizHawk.Client.EmuHawk/BizHawk.Client.EmuHawk.csproj -c Release
+
+      - name: Commit & Push Changes
+        run: |
+          git add locale/ src/
+          git diff --staged --quiet || (git commit -m "feat(i18n): auto-update Chinese translations [skip ci]" && git push origin master)

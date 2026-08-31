@@ -1,0 +1,78 @@
+name: Build & Publish BizHawk Chinese Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release Tag 名称 (例如 v2.11.2-zh_CN)'
+        required: true
+        default: 'v2.11.2-zh_CN'
+
+jobs:
+  build_and_release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Apply Chinese Translation Patch
+        run: |
+          python tools/bizhawk_patcher.py --patch
+
+      - name: Build BizHawk Release
+        run: |
+          dotnet build BizHawk.sln -c Release -p:Platform="Any CPU" || dotnet build src/BizHawk.Client.EmuHawk/BizHawk.Client.EmuHawk.csproj -c Release
+
+      - name: Package Release ZIP
+        shell: pwsh
+        run: |
+          $OutputFolder = "output"
+          New-Item -ItemType Directory -Force -Path $OutputFolder
+          if (Test-Path "output/EmuHawk.exe") {
+            Compress-Archive -Path "output/*" -DestinationPath "BizHawk-Chinese-Win-x64.zip"
+          } elseif (Test-Path "src/BizHawk.Client.EmuHawk/bin/Release/net8.0-windows") {
+            Compress-Archive -Path "src/BizHawk.Client.EmuHawk/bin/Release/net8.0-windows/*" -DestinationPath "BizHawk-Chinese-Win-x64.zip"
+          } else {
+            Compress-Archive -Path "src/BizHawk.Client.EmuHawk/bin/Release/*" -DestinationPath "BizHawk-Chinese-Win-x64.zip"
+          }
+
+      - name: Create GitHub Release & Upload Asset
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: "BizHawk 中文汉化版 ${{ github.event.inputs.release_tag || github.ref_name }}"
+          body: |
+            ### 🎮 BizHawk 官方最新同步中文汉化版
+            
+            本版本由 **BizHawk-Chinese** 自动化流水线自动拉取官方最新源码、匹配 TAS 专业中文词典库并结合 AI 增量翻译构建发布。
+            
+            #### 🌟 特性
+            - 全量汉化主菜单、工具箱、配置界面与常用对话框
+            - 支持 TAStudio、RAM Search、RAM Watch、Hex Editor 等 TAS 调试工具
+            - 包含完整的核心模拟引擎与 Lua 脚本支持
+            
+            #### 📥 使用方法
+            1. 下载 `BizHawk-Chinese-Win-x64.zip` 并解压到英文路径目录；
+            2. 运行 `EmuHawk.exe` 即可享受纯正中文界面！
+          files: |
+            BizHawk-Chinese-Win-x64.zip

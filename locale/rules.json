@@ -1,0 +1,92 @@
+{
+  "scan_directories": [
+    "src/BizHawk.Client.EmuHawk",
+    "src/BizHawk.Client.Common"
+  ],
+  "file_extensions": [
+    ".cs"
+  ],
+  "exclude_directories": [
+    "bin",
+    "obj",
+    ".git",
+    ".vs",
+    "Assets",
+    "ExternalToolProjects",
+    "src/BizHawk.Emulation.Cores",
+    "src/BizHawk.Emulation.Disc.DiscImage"
+  ],
+  "match_patterns": [
+    {
+      "name": "Property Assignment (.Text = \"...\")",
+      "regex": "(\\bText\\s*=\\s*\")([^\"]+)(\")",
+      "priority": 1
+    },
+    {
+      "name": "ToolTipText Assignment (.ToolTipText = \"...\")",
+      "regex": "(\\bToolTipText\\s*=\\s*\")([^\"]+)(\")",
+      "priority": 1
+    },
+    {
+      "name": "HeaderText Assignment (.HeaderText = \"...\")",
+      "regex": "(\\bHeaderText\\s*=\\s*\")([^\"]+)(\")",
+      "priority": 1
+    },
+    {
+      "name": "ToolStripMenuItem Constructor",
+      "regex": "(new\\s+ToolStripMenuItem\\s*\\(\\s*\")([^\"]+)(\")",
+      "priority": 2
+    },
+    {
+      "name": "ToolStripButton Constructor",
+      "regex": "(new\\s+ToolStripButton\\s*\\(\\s*\")([^\"]+)(\")",
+      "priority": 2
+    },
+    {
+      "name": "ToolStripDropDownButton Constructor",
+      "regex": "(new\\s+ToolStripDropDownButton\\s*\\(\\s*\")([^\"]+)(\")",
+      "priority": 2
+    },
+    {
+      "name": "TabPage Constructor",
+      "regex": "(new\\s+TabPage\\s*\\(\\s*\")([^\"]+)(\")",
+      "priority": 2
+    },
+    {
+      "name": "SetToolTip Method Call",
+      "regex": "(SetToolTip\\s*\\([^,]+,\\s*\")([^\"]+)(\")",
+      "priority": 2
+    },
+    {
+      "name": "MessageBox Show Calls",
+      "regex": "(MessageBox(?:Ex)?\\.Show\\s*\\(\\s*\")([^\"]+)(\")",
+      "priority": 3
+    }
+  ],
+  "blacklist_exact": [
+    "",
+    " ",
+    "-",
+    "--",
+    "...",
+    "OK",
+    "None",
+    "0",
+    "1",
+    "N/A",
+    "null",
+    "true",
+    "false",
+    "Arial",
+    "Courier New",
+    "Microsoft Sans Serif",
+    "Segoe UI",
+    "Tahoma"
+  ],
+  "blacklist_regex": [
+    "^[0-9\\.\\-\\+\\*/%\\$#@!~]+$",
+    "^http(s)?://",
+    "^\\{[0-9]+\\}$",
+    "^[a-zA-Z0-9_]+\\.(dll|exe|rom|bin|nes|sfc|smc|z64|gb|gba|gen|iso|chd|cue|lua|txt|json|xml)$"
+  ]
+}
