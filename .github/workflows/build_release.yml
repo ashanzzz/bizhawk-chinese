@@ -33,26 +33,31 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Clone Official BizHawk Source & Assets
+      - name: Clone Official BizHawk Source & Assets (Matching Tag)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          Write-Host "Cloning official BizHawk source..."
-          git clone --depth 1 https://github.com/TASEmulators/BizHawk.git bizhawk_src
+          Write-Host "Fetching latest official BizHawk release tag..."
+          $tag = (gh release view --repo TASEmulators/BizHawk --json tagName -q .tagName).Trim()
+          Write-Host "Target release tag: $tag"
           
-          Write-Host "Downloading latest official BizHawk binary release base via GitHub CLI..."
+          Write-Host "Cloning official BizHawk source at tag $tag..."
+          git clone --depth 1 --branch $tag https://github.com/TASEmulators/BizHawk.git bizhawk_src
+          
+          Write-Host "Downloading matching official BizHawk binary release base..."
           gh release download --repo TASEmulators/BizHawk --pattern "*win-x64.zip" --output "official_release.zip"
 
       - name: Apply Chinese Translation Patch
         run: |
           python tools/bizhawk_patcher.py --repo-path bizhawk_src --patch
 
-      - name: Build Patched BizHawk
+      - name: Build Patched BizHawk Solution
         shell: pwsh
         run: |
           cd bizhawk_src
-          dotnet build src/BizHawk.Client.EmuHawk/BizHawk.Client.EmuHawk.csproj -c Release -o output
+          Write-Host "Building entire BizHawk.sln..."
+          dotnet build BizHawk.sln -c Release
 
       - name: Assemble Final Chinese Release
         run: |

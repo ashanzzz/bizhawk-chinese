@@ -29,7 +29,7 @@ def assemble_release():
             zip_ref.extractall(dest_folder)
             
     # Check if files were extracted inside a subfolder
-    subdirs = [d for d in dest_folder.iterdir() if d.is_dir()]
+    subdirs = [d for d in dest_folder.iterdir() if d.is_dir() and d.name != "dll"]
     if len(subdirs) == 1 and not (dest_folder / "EmuHawk.exe").exists() and (subdirs[0] / "EmuHawk.exe").exists():
         print(f"[*] Flattening nested subfolder: {subdirs[0].name}")
         for item in subdirs[0].iterdir():
@@ -48,6 +48,12 @@ def assemble_release():
                 dst_file = target_sub / f
                 shutil.copy2(src_file, dst_file)
                 
+        # Ensure EmuHawk.exe is updated if BizHawk.Client.EmuHawk.exe was produced
+        client_exe = dest_folder / "BizHawk.Client.EmuHawk.exe"
+        emuhawk_exe = dest_folder / "EmuHawk.exe"
+        if client_exe.exists():
+            shutil.copy2(client_exe, emuhawk_exe)
+            
     # 3. Create Release ZIP Archive
     print(f"[*] Creating final distribution archive: {output_zip}...")
     if output_zip.exists():
