@@ -34,17 +34,18 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Clone Official BizHawk Source & Assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
           Write-Host "Cloning official BizHawk source..."
           git clone --depth 1 https://github.com/TASEmulators/BizHawk.git bizhawk_src
           
-          Write-Host "Fetching latest official binary release base..."
-          $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/TASEmulators/BizHawk/releases/latest"
-          $asset = $latestRelease.assets | Where-Object { $_.name -like "*win-x64.zip" } | Select-Object -First 1
-          if ($asset) {
-            Write-Host "Downloading $($asset.browser_download_url)..."
-            Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "official_release.zip"
+          Write-Host "Downloading latest official BizHawk binary release base via GitHub CLI..."
+          gh release download --repo TASEmulators/BizHawk --pattern "*win-x64.zip" --output "official_release.zip"
+          
+          if (Test-Path "official_release.zip") {
+            Write-Host "Extracting official release base package..."
             Expand-Archive -Path "official_release.zip" -DestinationPath "release_base" -Force
           }
 
@@ -63,20 +64,20 @@ jobs:
         run: |
           $ReleaseFolder = "BizHawk-Chinese"
           if (Test-Path "release_base") {
-            Copy-Item -Path "release_base" -Destination $ReleaseFolder -Recurse -Force
+            Copy-Item -Path "release_base/*" -Destination $ReleaseFolder -Recurse -Force
           } else {
             New-Item -ItemType Directory -Force -Path $ReleaseFolder
           }
           
-          # Find compiled outputs
+          # Find compiled output binaries and update them
           $buildOutputs = Get-ChildItem -Path "bizhawk_src/src/BizHawk.Client.EmuHawk/bin/Release" -Recurse -Filter "*.dll", "*.exe"
           foreach ($file in $buildOutputs) {
             Copy-Item -Path $file.FullName -Destination $ReleaseFolder -Force
           }
           
-          # Compress to zip
+          # Compress into final package
           Compress-Archive -Path "$ReleaseFolder/*" -DestinationPath "BizHawk-Chinese-Win-x64.zip" -Force
-          Write-Host "Package created: BizHawk-Chinese-Win-x64.zip"
+          Write-Host "Release package successfully assembled: BizHawk-Chinese-Win-x64.zip"
 
       - name: Create GitHub Release & Upload Asset
         uses: softprops/action-gh-release@v2
@@ -95,7 +96,7 @@ jobs:
             - ✅ **开箱即用，游戏全兼容**：完整内置所有官方原生模拟内核（FC/NES, SFC/SNES, N64, GB/GBA, MD/Genesis, PS1, Saturn 等），支持直接载入 ROM 与 TAS 录像工程。
 
             #### 📥 下载与运行
-            1. 点击下方附件下载 **`BizHawk-Chinese-Win-x64.zip`**；
+            1. 点击下方附件直接下载 **`BizHawk-Chinese-Win-x64.zip`**；
             2. 解压到任意非中文或英文字符路径（例如 `D:\BizHawk`）；
             3. 双击运行 **`EmuHawk.exe`** 即可直接体验全中文界面并畅玩游戏！
           files: |
