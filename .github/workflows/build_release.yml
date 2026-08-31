@@ -64,19 +64,26 @@ jobs:
         run: |
           $ReleaseFolder = "BizHawk-Chinese"
           if (Test-Path "release_base") {
-            Copy-Item -Path "release_base/*" -Destination $ReleaseFolder -Recurse -Force
+            # Find the unzipped content folder inside release_base (or release_base itself)
+            $inner = Get-ChildItem -Path "release_base"
+            if ($inner.Count -eq 1 -and $inner[0].PSIsContainer) {
+              Rename-Item -Path $inner[0].FullName -NewName $ReleaseFolder
+              Move-Item -Path "release_base/$ReleaseFolder" -Destination "."
+            } else {
+              Rename-Item -Path "release_base" -NewName $ReleaseFolder
+            }
           } else {
             New-Item -ItemType Directory -Force -Path $ReleaseFolder
           }
           
           # Find compiled output binaries and update them
-          $buildOutputs = Get-ChildItem -Path "bizhawk_src/src/BizHawk.Client.EmuHawk/bin/Release" -Recurse -Filter "*.dll", "*.exe"
+          $buildOutputs = Get-ChildItem -Path "bizhawk_src/src/BizHawk.Client.EmuHawk/bin/Release" -Recurse -Include "*.dll", "*.exe"
           foreach ($file in $buildOutputs) {
             Copy-Item -Path $file.FullName -Destination $ReleaseFolder -Force
           }
           
           # Compress into final package
-          Compress-Archive -Path "$ReleaseFolder/*" -DestinationPath "BizHawk-Chinese-Win-x64.zip" -Force
+          Compress-Archive -Path "$ReleaseFolder\*" -DestinationPath "BizHawk-Chinese-Win-x64.zip" -Force
           Write-Host "Release package successfully assembled: BizHawk-Chinese-Win-x64.zip"
 
       - name: Create GitHub Release & Upload Asset
