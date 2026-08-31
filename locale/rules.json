@@ -1,7 +1,8 @@
 {
   "scan_directories": [
     "src/BizHawk.Client.EmuHawk",
-    "src/BizHawk.Client.Common"
+    "src/BizHawk.Client.Common",
+    "src/BizHawk.WinForms.Controls"
   ],
   "file_extensions": [
     ".cs"
@@ -33,18 +34,8 @@
       "priority": 1
     },
     {
-      "name": "ToolStripMenuItem Constructor",
-      "regex": "(new\\s+ToolStripMenuItem\\s*\\(\\s*\")([^\"]+)(\")",
-      "priority": 2
-    },
-    {
-      "name": "ToolStripButton Constructor",
-      "regex": "(new\\s+ToolStripButton\\s*\\(\\s*\")([^\"]+)(\")",
-      "priority": 2
-    },
-    {
-      "name": "ToolStripDropDownButton Constructor",
-      "regex": "(new\\s+ToolStripDropDownButton\\s*\\(\\s*\")([^\"]+)(\")",
+      "name": "ToolStripMenuItem / ToolStripItem Constructors",
+      "regex": "(new\\s+ToolStrip(?:MenuItem|Button|DropDownButton|Label|StatusLabel|DropDownItem)\\s*\\(\\s*\")([^\"]+)(\")",
       "priority": 2
     },
     {
@@ -58,9 +49,49 @@
       "priority": 2
     },
     {
-      "name": "MessageBox Show Calls",
+      "name": "MessageBox / MsgBox / Modal Calls",
       "regex": "(MessageBox(?:Ex)?\\.Show\\s*\\(\\s*\")([^\"]+)(\")",
       "priority": 3
+    },
+    {
+      "name": "AddOnScreenMessage (OSD HUD Messages)",
+      "regex": "(AddOnScreenMessage\\s*\\(\\s*\")([^\"]+)(\")",
+      "priority": 3
+    },
+    {
+      "name": "ShowMessageIfError",
+      "regex": "(ShowMessageIfError\\s*\\([^,]+,\\s*\")([^\"]+)(\")",
+      "priority": 3
+    },
+    {
+      "name": "DisplayMessageIfFailed",
+      "regex": "(DisplayMessageIfFailed\\s*\\([^,]+,\\s*\")([^\"]+)(\")",
+      "priority": 3
+    },
+    {
+      "name": "ModalMessageBox / ShowMessageBox Calls",
+      "regex": "((?:ModalMessageBox|ShowMessageBox|ShowMessageBox2|ShowMessageBox3|ShowWarning|ShowError|ShowInfo|AddMessage|Notify\\.Warn|Notify\\.Error|Notify\\.Info)\\s*\\(\\s*(?:owner:\\s*[^,]+,\\s*)?(?:text:\\s*)?\")([^\"]+)(\")",
+      "priority": 3
+    },
+    {
+      "name": "Named Parameters (title / message / caption)",
+      "regex": "((?:title|message|caption|prefixMessage|errorText):\\s*\")([^\"]+)(\")",
+      "priority": 3
+    },
+    {
+      "name": "Component Property Attributes",
+      "regex": "(\\[(?:DisplayName|Description|Category|Tool|Config)\\s*\\(\\s*\")([^\"]+)(\")",
+      "priority": 4
+    },
+    {
+      "name": "Columns / ListView / ComboBox Add Text",
+      "regex": "(Columns\\.Add\\s*\\([^,]+,\\s*\")([^\"]+)(\")",
+      "priority": 4
+    },
+    {
+      "name": "UnlessUsingApiException / User Exceptions",
+      "regex": "(new\\s+(?:UnlessUsingApiException|Exception|InvalidOperationException|ArgumentException)\\s*\\(\\s*\")([^\"]+)(\")",
+      "priority": 4
     }
   ],
   "blacklist_exact": [

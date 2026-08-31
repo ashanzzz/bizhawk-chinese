@@ -82,7 +82,7 @@ def is_blacklisted(text: str, rules: dict) -> bool:
 
 def scan_source_files(repo_path: Path, rules: dict) -> List[Path]:
     """Scans and finds all candidate C# files based on rules."""
-    scan_dirs = rules.get("scan_directories", ["src/BizHawk.Client.EmuHawk"])
+    scan_dirs = rules.get("scan_directories", ["src/BizHawk.Client.EmuHawk", "src/BizHawk.Client.Common", "src/BizHawk.WinForms.Controls"])
     exclude_dirs = set(rules.get("exclude_directories", []))
     extensions = set(rules.get("file_extensions", [".cs"]))
     
@@ -129,7 +129,7 @@ def extract_strings(repo_path: Path) -> Tuple[Set[str], Set[str]]:
             
         for pattern in patterns:
             for match in pattern.finditer(content):
-                # group 2 is the text between quotes
+                # match group 2 is the text between delimiters
                 text = match.group(2) if match.lastindex and match.lastindex >= 2 else match.group(0)
                 if text and not is_blacklisted(text, rules):
                     all_strings.add(text)
@@ -137,6 +137,50 @@ def extract_strings(repo_path: Path) -> Tuple[Set[str], Set[str]]:
                         missing_strings.add(text)
                         
     return all_strings, missing_strings
+
+
+def apply_custom_hardcoded_patches(repo_path: Path):
+    """Applies specific code-level patches for interpolated strings, dialogs, and errors."""
+    print("[*] Applying specialized UI and dialog patches...")
+    
+    # 1. Program.cs (Privilege Warning)
+    prog_cs = repo_path / "src" / "BizHawk.Client.EmuHawk" / "Program.cs"
+    if prog_cs.exists():
+        with open(prog_cs, "r", encoding="utf-8") as f:
+            content = f.read()
+        content = content.replace(
+            'title: "This EmuHawk is privileged",',
+            'title: "EmuHawk 运行在管理员特权模式",'
+        )
+        old_priv_msg = 'message: $"EmuHawk detected it {(OSTailoredCode.IsUnixHost ? "is running as root (Superuser)" : "has Administrator privileges")}.\\n"\n\t\t\t\t\t\t\t+ $"Regularly using {(OSTailoredCode.IsUnixHost ? "Superuser" : "Administrator")} for things other than system administration makes it easier to hack you.\\n"\n\t\t\t\t\t\t\t+ "If you\'re certain, you may continue anyway (and without support).\\n"\n\t\t\t\t\t\t\t+ $"You\'ll find a flag \\"{nameof(Config.SkipSuperuserPrivsCheck)}\\" in the config file, which disables this warning.",'
+        new_priv_msg = 'message: "EmuHawk 检测到当前正在以管理员权限运行。\\n长期以管理员身份运行非系统管理程序容易增加系统被攻击的风险。\\n如果您确定要继续，可以忽略此提示。\\n您可以在配置文件中设置 \\"SkipSuperuserPrivsCheck\\" 选项以永久关闭此警告。",'
+        content = content.replace(old_priv_msg, new_priv_msg)
+        with open(prog_cs, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    # 2. FileWriteResult.cs (File operation errors)
+    fwr_cs = repo_path / "src" / "BizHawk.Client.Common" / "FileWriteResult.cs"
+    if fwr_cs.exists():
+        with open(fwr_cs, "r", encoding="utf-8") as f:
+            content = f.read()
+        content = content.replace('return $"The file \\"{Paths.Final}\\" was written successfully.";', 'return $"文件 \\"{Paths.Final}\\" 已成功保存。";')
+        content = content.replace('return $"The temporary file \\"{Paths.Temp}\\" could not be opened.";', 'return $"无法打开临时文件 \\"{Paths.Temp}\\"。";')
+        content = content.replace('return $"The file \\"{Paths.Final}\\" could not be created.";', 'return $"无法创建文件 \\"{Paths.Final}\\"。";')
+        content = content.replace('return $"An error occurred while writing the file.";', 'return $"写入文件时发生错误。";')
+        content = content.replace('return "The operation was aborted.";', 'return "操作已被中止。";')
+        content = content.replace('return $"The file \\"{Paths.Final}\\" could not be deleted.";', 'return $"无法删除文件 \\"{Paths.Final}\\"。";')
+        content = content.replace('return $"Failed to swap files. Unable to rename \\"{Paths.Temp}\\" to \\"{Paths.Final}\\"";', 'return $"交换文件失败。无法重命名 \\"{Paths.Temp}\\" 为 \\"{Paths.Final}\\"";')
+        with open(fwr_cs, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    # 3. DialogControllerExtensions.cs
+    dce_cs = repo_path / "src" / "BizHawk.Client.Common" / "DialogControllerExtensions.cs"
+    if dce_cs.exists():
+        with open(dce_cs, "r", encoding="utf-8") as f:
+            content = f.read()
+        content = content.replace('caption: "Error",', 'caption: "错误",')
+        with open(dce_cs, "w", encoding="utf-8") as f:
+            f.write(content)
 
 
 def apply_patch(repo_path: Path) -> int:
@@ -188,6 +232,9 @@ def apply_patch(repo_path: Path) -> int:
                 f.write(content)
             total_replaced += file_replaced_count
             
+    # Apply specialized hardcoded block patches
+    apply_custom_hardcoded_patches(repo_path)
+    
     print(f"[+] Patch completed! Total {total_replaced} strings replaced with Chinese.")
     return total_replaced
 
