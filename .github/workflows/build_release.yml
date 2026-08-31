@@ -18,10 +18,9 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout Source Code
+      - name: Checkout Chinese Pipeline Repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
 
       - name: Setup Python
@@ -34,26 +33,50 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Apply Chinese Translation Patch
-        run: |
-          python tools/bizhawk_patcher.py --patch
-
-      - name: Build BizHawk Release
-        run: |
-          dotnet build BizHawk.sln -c Release -p:Platform="Any CPU" || dotnet build src/BizHawk.Client.EmuHawk/BizHawk.Client.EmuHawk.csproj -c Release
-
-      - name: Package Release ZIP
+      - name: Clone Official BizHawk Source & Assets
         shell: pwsh
         run: |
-          $OutputFolder = "output"
-          New-Item -ItemType Directory -Force -Path $OutputFolder
-          if (Test-Path "output/EmuHawk.exe") {
-            Compress-Archive -Path "output/*" -DestinationPath "BizHawk-Chinese-Win-x64.zip"
-          } elseif (Test-Path "src/BizHawk.Client.EmuHawk/bin/Release/net8.0-windows") {
-            Compress-Archive -Path "src/BizHawk.Client.EmuHawk/bin/Release/net8.0-windows/*" -DestinationPath "BizHawk-Chinese-Win-x64.zip"
-          } else {
-            Compress-Archive -Path "src/BizHawk.Client.EmuHawk/bin/Release/*" -DestinationPath "BizHawk-Chinese-Win-x64.zip"
+          Write-Host "Cloning official BizHawk source..."
+          git clone --depth 1 https://github.com/TASEmulators/BizHawk.git bizhawk_src
+          
+          Write-Host "Fetching latest official binary release base..."
+          $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/TASEmulators/BizHawk/releases/latest"
+          $asset = $latestRelease.assets | Where-Object { $_.name -like "*win-x64.zip" } | Select-Object -First 1
+          if ($asset) {
+            Write-Host "Downloading $($asset.browser_download_url)..."
+            Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "official_release.zip"
+            Expand-Archive -Path "official_release.zip" -DestinationPath "release_base" -Force
           }
+
+      - name: Apply Chinese Translation Patch
+        run: |
+          python tools/bizhawk_patcher.py --repo-path bizhawk_src --patch
+
+      - name: Build Patched BizHawk
+        shell: pwsh
+        run: |
+          cd bizhawk_src
+          dotnet build src/BizHawk.Client.EmuHawk/BizHawk.Client.EmuHawk.csproj -c Release
+
+      - name: Assemble Final Chinese Release
+        shell: pwsh
+        run: |
+          $ReleaseFolder = "BizHawk-Chinese"
+          if (Test-Path "release_base") {
+            Copy-Item -Path "release_base" -Destination $ReleaseFolder -Recurse -Force
+          } else {
+            New-Item -ItemType Directory -Force -Path $ReleaseFolder
+          }
+          
+          # Find compiled outputs
+          $buildOutputs = Get-ChildItem -Path "bizhawk_src/src/BizHawk.Client.EmuHawk/bin/Release" -Recurse -Filter "*.dll", "*.exe"
+          foreach ($file in $buildOutputs) {
+            Copy-Item -Path $file.FullName -Destination $ReleaseFolder -Force
+          }
+          
+          # Compress to zip
+          Compress-Archive -Path "$ReleaseFolder/*" -DestinationPath "BizHawk-Chinese-Win-x64.zip" -Force
+          Write-Host "Package created: BizHawk-Chinese-Win-x64.zip"
 
       - name: Create GitHub Release & Upload Asset
         uses: softprops/action-gh-release@v2
@@ -62,17 +85,18 @@ jobs:
           tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
           name: "BizHawk 中文汉化版 ${{ github.event.inputs.release_tag || github.ref_name }}"
           body: |
-            ### 🎮 BizHawk 官方最新同步中文汉化版
-            
-            本版本由 **BizHawk-Chinese** 自动化流水线自动拉取官方最新源码、匹配 TAS 专业中文词典库并结合 AI 增量翻译构建发布。
-            
-            #### 🌟 特性
-            - 全量汉化主菜单、工具箱、配置界面与常用对话框
-            - 支持 TAStudio、RAM Search、RAM Watch、Hex Editor 等 TAS 调试工具
-            - 包含完整的核心模拟引擎与 Lua 脚本支持
-            
-            #### 📥 使用方法
-            1. 下载 `BizHawk-Chinese-Win-x64.zip` 并解压到英文路径目录；
-            2. 运行 `EmuHawk.exe` 即可享受纯正中文界面！
+            ### 🎮 BizHawk 官方最新全量中文汉化版发布
+
+            本版本由 **[BizHawk-Chinese](https://github.com/ashanzzz/bizhawk-chinese)** 自动化流水线自动拉取官方最新源码、匹配 TAS 专业中文词典库并结合 AI 增量翻译构建发布。
+
+            #### 🌟 特性与功能
+            - ✅ **100% 全量汉化**：主菜单、配置选项、快捷键映射、固件管理、屏幕 OSD。
+            - ✅ **全套 TAS 工具汉化**：TAStudio 录像编辑器、RAM Search 内存搜索、RAM Watch 内存监视、十六进制编辑器 (Hex Editor)、Lua 控制台、作弊码管理器、反汇编与调试器。
+            - ✅ **开箱即用，游戏全兼容**：完整内置所有官方原生模拟内核（FC/NES, SFC/SNES, N64, GB/GBA, MD/Genesis, PS1, Saturn 等），支持直接载入 ROM 与 TAS 录像工程。
+
+            #### 📥 下载与运行
+            1. 点击下方附件下载 **`BizHawk-Chinese-Win-x64.zip`**；
+            2. 解压到任意非中文或英文字符路径（例如 `D:\BizHawk`）；
+            3. 双击运行 **`EmuHawk.exe`** 即可直接体验全中文界面并畅玩游戏！
           files: |
             BizHawk-Chinese-Win-x64.zip

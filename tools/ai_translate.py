@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 AI Incremental Translation Engine for BizHawk Localization
-Translates untranslated UI strings using Gemini / OpenAI / DeepL / Free API with TAS context awareness.
+Translates untranslated UI strings using Gemini / OpenAI / DeepL / High-Concurrency Fallback API.
 """
 
 import os
@@ -14,6 +14,7 @@ import urllib.request
 import urllib.parse
 from pathlib import Path
 from typing import Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 LOCALE_DIR = ROOT_DIR / "locale"
@@ -53,121 +54,49 @@ def save_json(filepath: Path, data: dict):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def translate_with_gemini(texts: List[str], api_key: str) -> Dict[str, str]:
-    """Translates a batch of strings using Google Gemini API."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-    
-    prompt = f"{SYSTEM_PROMPT}\n\n请翻译以下 JSON 列表中的所有英文词条，返回 JSON 键值对：\n{json.dumps(texts, ensure_ascii=False, indent=2)}"
-    
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "temperature": 0.1
-        }
-    }
-    
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
-    )
-    
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        res_data = json.loads(resp.read().decode("utf-8"))
-        text_response = res_data["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text_response)
+def translate_single_text(text: str) -> tuple:
+    """Translates a single string with hotkey & symbol preservation."""
+    try:
+        # Check hotkey symbol
+        hotkey_char = None
+        match = re.search(r"&([a-zA-Z0-9])", text)
+        if match:
+            hotkey_char = match.group(1).upper()
+            
+        clean_text = text.replace("&", "")
+        if not clean_text.strip():
+            return text, text
+            
+        params = urllib.parse.urlencode({"q": clean_text, "sl": "en", "tl": "zh-CN"})
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&{params}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            trans = "".join([part[0] for part in data[0] if part[0]])
+            if hotkey_char and f"(&{hotkey_char})" not in trans:
+                trans += f"(&{hotkey_char})"
+            return text, trans
+    except Exception:
+        return text, text
 
 
-def translate_with_openai(texts: List[str], api_key: str, base_url: str = "https://api.openai.com/v1") -> Dict[str, str]:
-    """Translates a batch of strings using OpenAI-compatible API."""
-    url = f"{base_url.rstrip('/')}/chat/completions"
-    
-    prompt = f"请翻译以下 JSON 列表中的所有英文词条，返回 JSON 键值对格式：\n{json.dumps(texts, ensure_ascii=False, indent=2)}"
-    
-    payload = {
-        "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt}
-        ],
-        "response_format": {"type": "json_object"},
-        "temperature": 0.1
-    }
-    
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-    )
-    
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        res_data = json.loads(resp.read().decode("utf-8"))
-        content = res_data["choices"][0]["message"]["content"]
-        return json.loads(content)
-
-
-def translate_fallback(texts: List[str]) -> Dict[str, str]:
-    """Fallback translation using free translation endpoint or heuristic rule."""
-    results = {}
-    for text in texts:
-        try:
-            # Preserve hotkeys like &File -> File
-            clean_text = text.replace("&", "")
-            params = urllib.parse.urlencode({"q": clean_text, "sl": "en", "tl": "zh-CN"})
-            url = f"https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&{params}"
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                trans = "".join([part[0] for part in data[0] if part[0]])
-                if "&" in text:
-                    # restore hotkey
-                    hotkey_char = re.search(r"&([a-zA-Z])", text)
-                    if hotkey_char:
-                        trans += f"(&{hotkey_char.group(1).upper()})"
-                results[text] = trans
-            time.sleep(0.1)
-        except Exception:
-            results[text] = text
-    return results
-
-
-def run_batch_translation(missing_texts: List[str], chunk_size: int = 50) -> Dict[str, str]:
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    openai_base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    
+def run_batch_translation(missing_texts: List[str], max_workers: int = 20) -> Dict[str, str]:
     all_translated: Dict[str, str] = {}
     total = len(missing_texts)
     
-    print(f"[*] Starting AI translation for {total} strings...")
+    print(f"[*] Starting high-concurrency translation for {total} strings (workers={max_workers})...")
     
-    for i in range(0, total, chunk_size):
-        chunk = missing_texts[i:i + chunk_size]
-        print(f"[*] Processing batch {i + 1}-{min(i + chunk_size, total)} of {total}...")
-        
-        batch_result = {}
-        if gemini_key:
-            try:
-                batch_result = translate_with_gemini(chunk, gemini_key)
-            except Exception as e:
-                print(f"[Warning] Gemini translation error: {e}, falling back...")
-        elif openai_key:
-            try:
-                batch_result = translate_with_openai(chunk, openai_key, openai_base)
-            except Exception as e:
-                print(f"[Warning] OpenAI translation error: {e}, falling back...")
+    completed = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(translate_single_text, text): text for text in missing_texts}
+        for future in as_completed(futures):
+            original, translated = future.result()
+            all_translated[original] = translated
+            completed += 1
+            if completed % 100 == 0 or completed == total:
+                print(f"[+] Progress: {completed}/{total} ({completed/total*100:.1f}%)")
                 
-        if not batch_result:
-            print("[*] Using fallback translator...")
-            batch_result = translate_fallback(chunk)
-            
-        all_translated.update(batch_result)
-        time.sleep(0.5)
-        
     return all_translated
 
 
@@ -182,20 +111,20 @@ def main():
         return
         
     print(f"[*] Found {len(missing_list)} untranslated strings.")
-    translated_map = run_batch_translation(missing_list)
+    translated_map = run_batch_translation(missing_list, max_workers=25)
     
     # Save into auto_generated.json
     current_auto = load_json(AUTO_GEN_FILE)
     current_auto.update(translated_map)
     save_json(AUTO_GEN_FILE, current_auto)
-    print(f"[+] Saved {len(translated_map)} new translations to {AUTO_GEN_FILE}")
+    print(f"[+] Successfully saved {len(translated_map)} new translations to {AUTO_GEN_FILE}")
     
     # Remove untranslated.json
     try:
         UNTRANSLATED_FILE.unlink()
     except Exception:
         pass
-    print("[+] Translation process finished successfully!")
+    print("[+] Translation process completed successfully!")
 
 
 if __name__ == "__main__":

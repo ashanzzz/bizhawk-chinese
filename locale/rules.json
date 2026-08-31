@@ -87,6 +87,8 @@
     "^[0-9\\.\\-\\+\\*/%\\$#@!~]+$",
     "^http(s)?://",
     "^\\{[0-9]+\\}$",
+    "^%[a-zA-Z0-9_]+%$",
+    "^[#\\$]+[0-9a-fA-F\\?XD]+$",
     "^[a-zA-Z0-9_]+\\.(dll|exe|rom|bin|nes|sfc|smc|z64|gb|gba|gen|iso|chd|cue|lua|txt|json|xml)$"
   ]
 }
