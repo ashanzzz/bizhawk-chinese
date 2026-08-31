@@ -57,8 +57,8 @@ git init
 git add .
 git commit -m "feat: initial commit for BizHawk-Chinese localization pipeline"
 
-# 2. 关联您的 GitHub 远程仓库 (将 YOUR_USERNAME 替换为您的 GitHub 用户名)
-git remote add origin https://github.com/YOUR_USERNAME/bizhawk-chinese.git
+# 2. 关联您的 GitHub 远程仓库
+git remote add origin https://github.com/ashanzzz/bizhawk-chinese.git
 git branch -M master
 git push -u origin master
 ```
