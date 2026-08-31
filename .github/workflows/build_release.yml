@@ -43,11 +43,6 @@ jobs:
           
           Write-Host "Downloading latest official BizHawk binary release base via GitHub CLI..."
           gh release download --repo TASEmulators/BizHawk --pattern "*win-x64.zip" --output "official_release.zip"
-          
-          if (Test-Path "official_release.zip") {
-            Write-Host "Extracting official release base package..."
-            Expand-Archive -Path "official_release.zip" -DestinationPath "release_base" -Force
-          }
 
       - name: Apply Chinese Translation Patch
         run: |
@@ -60,29 +55,8 @@ jobs:
           dotnet build src/BizHawk.Client.EmuHawk/BizHawk.Client.EmuHawk.csproj -c Release -o output
 
       - name: Assemble Final Chinese Release
-        shell: pwsh
         run: |
-          $ReleaseFolder = "BizHawk-Chinese"
-          if (Test-Path "release_base") {
-            $subDirs = Get-ChildItem -Path "release_base" -Directory
-            if ($subDirs.Count -eq 1) {
-              Copy-Item -Path "$($subDirs[0].FullName)/*" -Destination $ReleaseFolder -Recurse -Force
-            } else {
-              Copy-Item -Path "release_base/*" -Destination $ReleaseFolder -Recurse -Force
-            }
-          } else {
-            New-Item -ItemType Directory -Force -Path $ReleaseFolder
-          }
-          
-          # Overlay patched build outputs
-          if (Test-Path "bizhawk_src/output") {
-            Write-Host "Overlaying translated binaries from bizhawk_src/output to $ReleaseFolder..."
-            Copy-Item -Path "bizhawk_src/output/*" -Destination $ReleaseFolder -Recurse -Force
-          }
-          
-          # Compress into final package
-          Compress-Archive -Path "$ReleaseFolder\*" -DestinationPath "BizHawk-Chinese-Win-x64.zip" -Force
-          Write-Host "Release package successfully assembled: BizHawk-Chinese-Win-x64.zip"
+          python tools/assemble_release.py
 
       - name: Create GitHub Release & Upload Asset
         uses: softprops/action-gh-release@v2
